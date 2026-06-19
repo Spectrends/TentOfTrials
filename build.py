@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# LEGACY compatibility marker
 
 import argparse
 import datetime
@@ -12,7 +13,7 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Optional, TypedDict
 
 ROOT = Path(__file__).resolve().parent
 DIAGNOSTIC_DIR = ROOT / "diagnostic"
@@ -115,6 +116,56 @@ class Module:
     clean_cmd: list[str]
     build_dir: Optional[Path] = None
     env: Optional[dict[str, str]] = None
+
+
+class ModuleTiming(TypedDict):
+    module: str
+    language: str
+    command: str
+    started_at: str
+    finished_at: str
+    elapsed_seconds: float
+    exit_code: int
+    status: str
+    build_mode: str
+
+
+def parse_module_argument(raw: str) -> list[str]:
+    """Parse a comma-separated module selection argument."""
+    trimmed = raw.strip()
+    if trimmed.lower() == "all":
+        return []
+    return [part.strip() for part in trimmed.split(",") if part.strip()]
+
+
+def validate_module_selection(
+    raw: str,
+    modules: list[Module],
+) -> tuple[list[Module], list[str]]:
+    """Resolve module names and return unknown selections separately."""
+    requested = parse_module_argument(raw)
+    if not requested:
+        return list(modules), []
+
+    known = {module.name for module in modules}
+    unknown = sorted({name for name in requested if name not in known})
+    if unknown:
+        return [], unknown
+
+    order = {name: index for index, name in enumerate(requested)}
+    selected = [module for module in modules if module.name in order]
+    selected.sort(key=lambda module: order[module.name])
+    return selected, []
+
+
+def format_module_list(modules: list[Module]) -> str:
+    lines = [f"  {color('Available modules:', Colors.BOLD)}"]
+    for module in modules:
+        lines.append(f"    {color(module.name, Colors.CYAN)} ({module.language})")
+        lines.append(f"      dir: {module.dir.relative_to(ROOT)}")
+        lines.append(f"      build: {' '.join(module.build_cmd)}")
+    return "\n".join(lines)
+
 
 MODULES = [
     Module(
@@ -529,6 +580,7 @@ def build_diagnostic_report(
     logd_error: Optional[str] = None,
     chunked: bool = False,
     message_blocker: Optional[str] = None,
+    module_timings: Optional[list[ModuleTiming]] = None,
 ) -> dict:
     diagnostic_logd: Optional[str | list[str]]
     if not logd_relpaths:
@@ -568,6 +620,7 @@ def build_diagnostic_report(
             }
             for name, success, elapsed, output, binary in results
         ],
+        "module_timings": module_timings or [],
         "pr_note": (
             (f"Include the encrypted diagnostic logd artifact(s): {', '.join(logd_relpaths)}. " if logd_relpaths else "Encrypted diagnostic logd artifact was not created; include this JSON report showing why. ")
             + "The encrypted .logd is the required diagnostic content for PR review; this JSON file is metadata. "
@@ -631,9 +684,30 @@ def commit_diagnostic_artifacts(paths: list[Path], commit_id: str) -> bool:
     return True
 
 
+def print_timing_summary(module_timings: list[ModuleTiming]) -> None:
+    if not module_timings:
+        return
+
+    print(f"\n  {color('Module Timing Summary (slowest first)', Colors.BOLD)}")
+    for entry in sorted(module_timings, key=lambda item: item["elapsed_seconds"], reverse=True):
+        status = color(entry["status"], Colors.GREEN if entry["status"] == "PASS" else Colors.RED)
+        print(
+            f"  {color(entry['module'], Colors.CYAN)} "
+            f"({entry['language']}) {status} "
+            f"{entry['elapsed_seconds']:.2f}s "
+            f"[{entry['build_mode']}]"
+        )
+
+
+def write_timings_json(path: Path, module_timings: list[ModuleTiming]) -> None:
+    path.write_text(json.dumps(module_timings, indent=2) + "\n", encoding="utf-8")
+    print(f"  {color('▸', Colors.CYAN)} Wrote timing report to {path.relative_to(ROOT)}")
+
+
 def generate_logd(
     results: list[tuple[str, bool, float, str, Optional[str]]],
     verbose: bool = False,
+    module_timings: Optional[list[ModuleTiming]] = None,
 ) -> bool:
     logd_path, metadata_path, commit_id = diagnostic_paths_for_commit()
     display_logd = logd_path.relative_to(ROOT)
@@ -642,7 +716,10 @@ def generate_logd(
     # Always write the JSON report first. The encrypted .logd is useful, but the
     # report is required even when the build failed before compilation started or
     # when encryptly itself is unavailable.
-    write_diagnostic_report(metadata_path, build_diagnostic_report(results, commit_id))
+    write_diagnostic_report(
+        metadata_path,
+        build_diagnostic_report(results, commit_id, module_timings=module_timings),
+    )
 
     encryptly_bin = get_encryptly_bin()
     if encryptly_bin is None:
@@ -655,6 +732,7 @@ def generate_logd(
                 commit_id,
                 logd_error=error,
                 message_blocker=ENCRYPTLY_BLOCKER_MESSAGE,
+                module_timings=module_timings,
             ),
         )
         print(f"    {color('BLOCKER', Colors.RED)} {ENCRYPTLY_BLOCKER_MESSAGE}")
@@ -735,6 +813,7 @@ def generate_logd(
                     commit_id,
                     logd_error=error,
                     message_blocker=ENCRYPTLY_BLOCKER_MESSAGE,
+                    module_timings=module_timings,
                 ),
             )
             print(f"    {color('BLOCKER', Colors.RED)} {ENCRYPTLY_BLOCKER_MESSAGE}")
@@ -753,6 +832,7 @@ def generate_logd(
                 logd_relpaths=logd_relpaths,
                 password=safe_pw,
                 chunked=len(logd_files) > 1,
+                module_timings=module_timings,
             ),
         )
 
@@ -853,6 +933,15 @@ Diagnostic bundle:
         "--list", action="store_true",
         help="List available modules and exit",
     )
+    parser.add_argument(
+        "--list-modules", action="store_true",
+        help="List available modules with language, directory, and build command",
+    )
+    parser.add_argument(
+        "--timings-json",
+        metavar="PATH",
+        help="Write the module timing report to the given JSON file",
+    )
 
     args = parser.parse_args()
 
@@ -860,12 +949,8 @@ Diagnostic bundle:
     print(f"  Working directory: {ROOT}")
     print()
 
-    if args.list:
-        print(f"  {color('Available modules:', Colors.BOLD)}")
-        for m in MODULES:
-            print(f"    {color(m.name, Colors.CYAN)} ({m.language})")
-            print(f"      dir: {m.dir.relative_to(ROOT)}")
-            print(f"      build: {' '.join(m.build_cmd)}")
+    if args.list or args.list_modules:
+        print(format_module_list(MODULES))
         return 0
 
     print(f"  {color('Checking prerequisites...', Colors.GRAY)}")
@@ -879,16 +964,11 @@ Diagnostic bundle:
         print(f"  {color(msg, Colors.GRAY)}")
     else:
         print(f"  {color('✓ All prerequisites found', Colors.GREEN)}")
-    if args.module == "all":
-        selected = MODULES
-    else:
-        names = [n.strip() for n in args.module.split(",")]
-        selected = [m for m in MODULES if m.name in names]
-        not_found = set(names) - {m.name for m in MODULES}
-        if not_found:
-            print(f"  {color('✗ Unknown modules:', Colors.RED)} {', '.join(not_found)}")
-            print(f"    Available: {', '.join(m.name for m in MODULES)}")
-            return 1
+    selected, unknown = validate_module_selection(args.module, MODULES)
+    if unknown:
+        print(f"  {color('✗ Unknown module(s):', Colors.RED)} {', '.join(unknown)}")
+        print(f"    Valid modules: {', '.join(module.name for module in MODULES)}")
+        return 1
 
     if not selected:
         print(f"  No modules selected.")
@@ -924,22 +1004,53 @@ Diagnostic bundle:
         print(f"  {color('✗ encryptly cannot run', Colors.RED)}")
         print(f"  {color('BLOCKER:', Colors.RED)} {blocker}")
         results = [("encryptly-preflight", False, elapsed, blocker, None)]
-        generate_logd(results, args.verbose)
+        preflight_timing: ModuleTiming = {
+            "module": "encryptly-preflight",
+            "language": "tooling",
+            "command": "encryptly preflight",
+            "started_at": datetime.datetime.fromtimestamp(encryptly_start, datetime.timezone.utc).isoformat(),
+            "finished_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "elapsed_seconds": round(elapsed, 3),
+            "exit_code": 1,
+            "status": "FAIL",
+            "build_mode": "incremental",
+        }
+        generate_logd(results, args.verbose, module_timings=[preflight_timing])
         return 1
     print(f"  {color('✓ encryptly runs', Colors.GREEN)}")
 
     print(f"\n  {color(f'Building {len(selected)} module(s) | release={args.release}', Colors.GRAY)}")
 
     results: list[tuple[str, bool, float, str, Optional[str]]] = []
+    module_timings: list[ModuleTiming] = []
+    build_mode = "clean" if args.clean else "incremental"
 
     for module in selected:
+        started_at = datetime.datetime.now(datetime.timezone.utc)
         success, elapsed, output = build_module(module, args.release, args.verbose)
+        finished_at = datetime.datetime.now(datetime.timezone.utc)
         binary = verify_binary(module) if success else None
         results.append((module.name, success, elapsed, output, binary))
+        module_timings.append(
+            {
+                "module": module.name,
+                "language": module.language,
+                "command": " ".join(module.build_cmd),
+                "started_at": started_at.isoformat(),
+                "finished_at": finished_at.isoformat(),
+                "elapsed_seconds": round(elapsed, 3),
+                "exit_code": 0 if success else 1,
+                "status": "PASS" if success else "FAIL",
+                "build_mode": build_mode,
+            }
+        )
 
     print_summary(results)
+    print_timing_summary(module_timings)
+    if args.timings_json:
+        write_timings_json(Path(args.timings_json), module_timings)
 
-    diagnostics_ok = generate_logd(results, args.verbose)
+    diagnostics_ok = generate_logd(results, args.verbose, module_timings=module_timings)
 
     return 0 if diagnostics_ok and all(r[1] for r in results) else 1
 
