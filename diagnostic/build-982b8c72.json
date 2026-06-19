@@ -1,0 +1,92 @@
+{
+  "generated_at": "2026-06-19T23:55:39.829765+00:00",
+  "commit": "982b8c72",
+  "diagnostic_logd": [
+    "diagnostic/build-982b8c72-part001.logd",
+    "diagnostic/build-982b8c72-part002.logd",
+    "diagnostic/build-982b8c72-part003.logd",
+    "diagnostic/build-982b8c72-part004.logd"
+  ],
+  "diagnostic_logd_error": null,
+  "message_blocker": null,
+  "chunked": true,
+  "chunk_size_bytes": 41943040,
+  "password": "1a3907d17d2c33bab05a",
+  "decrypt_command": "encryptly unpack diagnostic/build-982b8c72.logd <outdir> --password 1a3907d17d2c33bab05a",
+  "total_modules": 10,
+  "passed": 2,
+  "failed": 8,
+  "modules": [
+    {
+      "name": "backend",
+      "status": "FAIL",
+      "elapsed_seconds": 0,
+      "artifact": null,
+      "output": "Command not found: [WinError 2] The system cannot find the file specified"
+    },
+    {
+      "name": "frontend",
+      "status": "FAIL",
+      "elapsed_seconds": 0.002,
+      "artifact": null,
+      "output": "Command not found: [WinError 2] The system cannot find the file specified"
+    },
+    {
+      "name": "market",
+      "status": "FAIL",
+      "elapsed_seconds": 0,
+      "artifact": null,
+      "output": "Command not found: [WinError 2] The system cannot find the file specified"
+    },
+    {
+      "name": "frailbox",
+      "status": "FAIL",
+      "elapsed_seconds": 0,
+      "artifact": null,
+      "output": "Command not found: [WinError 2] The system cannot find the file specified"
+    },
+    {
+      "name": "engine",
+      "status": "FAIL",
+      "elapsed_seconds": 0,
+      "artifact": null,
+      "output": "Command not found: [WinError 2] The system cannot find the file specified"
+    },
+    {
+      "name": "compliance",
+      "status": "FAIL",
+      "elapsed_seconds": 0,
+      "artifact": null,
+      "output": "Command not found: [WinError 2] The system cannot find the file specified"
+    },
+    {
+      "name": "v2-market-stream",
+      "status": "FAIL",
+      "elapsed_seconds": 0,
+      "artifact": null,
+      "output": "Command not found: [WinError 2] The system cannot find the file specified"
+    },
+    {
+      "name": "nfc-scanner",
+      "status": "PASS",
+      "elapsed_seconds": 0.013,
+      "artifact": null,
+      "output": ""
+    },
+    {
+      "name": "openapi-haskell",
+      "status": "FAIL",
+      "elapsed_seconds": 0,
+      "artifact": null,
+      "output": "Command not found: [WinError 2] The system cannot find the file specified"
+    },
+    {
+      "name": "openapi-tools",
+      "status": "PASS",
+      "elapsed_seconds": 0.005,
+      "artifact": null,
+      "output": ""
+    }
+  ],
+  "pr_note": "Include the encrypted diagnostic logd artifact(s): diagnostic/build-982b8c72-part001.logd, diagnostic/build-982b8c72-part002.logd, diagnostic/build-982b8c72-part003.logd, diagnostic/build-982b8c72-part004.logd. The encrypted .logd is the required diagnostic content for PR review; this JSON file is metadata. Maintainers may ask you to remove these diagnostic artifacts before merging."
+}
