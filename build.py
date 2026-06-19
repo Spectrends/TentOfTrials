@@ -17,6 +17,11 @@ from typing import Optional, TypedDict
 
 ROOT = Path(__file__).resolve().parent
 DIAGNOSTIC_DIR = ROOT / "diagnostic"
+
+
+def repo_relpath(path: Path) -> str:
+    """Return a repository-relative path using forward slashes for metadata/CI."""
+    return path.relative_to(ROOT).as_posix()
 DIAGNOSTIC_CHUNK_SIZE = 40 * 1024 * 1024
 ENCRYPTLY_BLOCKER_MESSAGE = "encryptly could not create an archive. You may have timed out; try launching it in the background and waiting for it to finish with no timeout due to a bug in encryptly."
 TEXT_ENCODING = "utf-8"
@@ -422,6 +427,8 @@ def build_module(
                     return False, time.time() - start, f"npm install failed:\n{install_result.stderr}"
             except subprocess.TimeoutExpired:
                 return False, time.time() - start, "npm install TIMEOUT (120s)"
+            except FileNotFoundError as e:
+                return False, time.time() - start, f"Command not found: {e}"
 
     if module.name == "engine":
 
@@ -592,7 +599,7 @@ def build_diagnostic_report(
 
     decrypt_target = logd_relpaths[0] if logd_relpaths and len(logd_relpaths) == 1 else None
     if logd_relpaths and len(logd_relpaths) > 1:
-        decrypt_target = str((DIAGNOSTIC_DIR / f"build-{commit_id}.logd").relative_to(ROOT))
+        decrypt_target = repo_relpath(DIAGNOSTIC_DIR / f"build-{commit_id}.logd")
 
     report = {
         "generated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
@@ -642,7 +649,7 @@ def commit_diagnostic_artifacts(paths: list[Path], commit_id: str) -> bool:
         print(f"    {color('✗', Colors.RED)} No diagnostic artifacts found to commit")
         return False
 
-    relpaths = [str(path.relative_to(ROOT)) for path in existing]
+    relpaths = [repo_relpath(path) for path in existing]
     status = run_text_process(
         ["git", "status", "--porcelain", "--", *relpaths],
         cwd=str(ROOT),
@@ -822,8 +829,8 @@ def generate_logd(
 
         safe_pw = sr.stdout.strip()
         logd_files = split_diagnostic_logd(logd_path)
-        logd_relpaths = [str(path.relative_to(ROOT)) for path in logd_files]
-        decrypt_target = logd_relpaths[0] if len(logd_relpaths) == 1 else str(logd_path.relative_to(ROOT))
+        logd_relpaths = [repo_relpath(path) for path in logd_files]
+        decrypt_target = logd_relpaths[0] if len(logd_relpaths) == 1 else repo_relpath(logd_path)
         write_diagnostic_report(
             metadata_path,
             build_diagnostic_report(
