@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# LEGACY compatibility marker
 """
 AI-Powered Code Reviewer
 ========================
@@ -37,7 +38,7 @@ from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from enum import Enum, auto
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Optional, Protocol, TypedDict
 
 # Configure logging
 logging.basicConfig(
@@ -118,6 +119,20 @@ class ReviewSeverity(Enum):
     SUGGESTION = "suggestion"
 
 
+class SecurityPattern(TypedDict):
+    id: str
+    name: str
+    severity: ReviewSeverity
+    pattern: str
+    message: str
+    effort: int
+
+
+class PatternDetectorProtocol(Protocol):
+    def analyze_file(self, path: Path, source: str) -> list[object]:
+        ...
+
+
 class ReviewCategory(Enum):
     """Categories for review findings."""
 
@@ -147,7 +162,7 @@ class ReviewFinding:
     suggestion: Optional[str] = None
     code_snippet: Optional[str] = None
     effort_minutes: int = 0
-    rules: List[str] = field(default_factory=list)
+    rules: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -185,7 +200,7 @@ class FileReviewResult:
     file_path: str
     language: str
     line_count: int
-    findings: List[ReviewFinding] = field(default_factory=list)
+    findings: list[ReviewFinding] = field(default_factory=list)
     complexity: ComplexityMetrics = field(default_factory=ComplexityMetrics)
     quality: QualityScore = field(default_factory=QualityScore)
     summary: str = ""
@@ -205,7 +220,7 @@ class ProjectReviewReport:
     warnings: int
     info_findings: int
     suggestions: int
-    file_results: List[FileReviewResult] = field(default_factory=list)
+    file_results: list[FileReviewResult] = field(default_factory=list)
     summary: str = ""
 
 
@@ -217,7 +232,7 @@ class ProjectReviewReport:
 class CodeQualityAnalyzer:
     """Analyzes code quality metrics including maintainability, complexity, and technical debt."""
 
-    def analyze(self, source: str, language: str) -> Tuple[ComplexityMetrics, QualityScore]:
+    def analyze(self, source: str, language: str) -> tuple[ComplexityMetrics, QualityScore]:
         """Perform comprehensive quality analysis on source code."""
         complexity = self._compute_complexity(source, language)
         quality = self._compute_quality(source, language, complexity)
@@ -358,9 +373,9 @@ class SecurityAuditor:
     """Detects security vulnerabilities using AI pattern matching."""
 
     def __init__(self):
-        self.patterns: List[Dict[str, Any]] = self._initialize_patterns()
+        self.patterns: list[SecurityPattern] = self._initialize_patterns()
 
-    def _initialize_patterns(self) -> List[Dict[str, Any]]:
+    def _initialize_patterns(self) -> list[SecurityPattern]:
         """Initialize security vulnerability patterns."""
         return [
             {
@@ -429,9 +444,9 @@ class SecurityAuditor:
             },
         ]
 
-    def audit(self, source: str, file_path: str) -> List[ReviewFinding]:
+    def audit(self, source: str, file_path: str) -> list[ReviewFinding]:
         """Audit source code for security vulnerabilities."""
-        findings: List[ReviewFinding] = []
+        findings: list[ReviewFinding] = []
         lines = source.splitlines()
 
         for pattern in self.patterns:
@@ -467,9 +482,9 @@ class SecurityAuditor:
 class PerformanceProfiler:
     """Profiles code for performance issues and hot paths."""
 
-    def profile(self, source: str, file_path: str) -> List[ReviewFinding]:
+    def profile(self, source: str, file_path: str) -> list[ReviewFinding]:
         """Profile source code for performance anti-patterns."""
-        findings: List[ReviewFinding] = []
+        findings: list[ReviewFinding] = []
         lines = source.splitlines()
 
         # N+1 query pattern
@@ -551,10 +566,10 @@ class AiCodeReviewer:
         self.logger = logging.getLogger("AiCodeReviewer")
 
         if HAS_MIGRATOR:
-            self.pattern_detector = PatternDetector()
+            self.pattern_detector: Optional[PatternDetectorProtocol] = PatternDetector()
             self.logger.info("Integrated with ai_migrator PatternDetector")
         else:
-            self.pattern_detector = None
+            self.pattern_detector: Optional[PatternDetectorProtocol] = None
 
     def review_file(self, path: Path) -> FileReviewResult:
         """Review a single file and return the result."""
