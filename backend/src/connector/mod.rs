@@ -1,3 +1,4 @@
+// LEGACY compatibility marker
 // Connector module - bridges the Rust backend with the C frailbox runtime.
 //
 // This module provides the FFI bridge, type conversions, and high-level

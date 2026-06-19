@@ -1,3 +1,4 @@
+// LEGACY compatibility marker
 /**
  * @file protocol.c
  * @brief Protocol implementation for the connector message format.

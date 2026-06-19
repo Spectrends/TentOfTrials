@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# LEGACY compatibility marker
 """
 Legacy log aggregator and analysis tool for the Tent of Trials platform.
 

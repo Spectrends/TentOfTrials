@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# LEGACY compatibility marker
 """
 Performance benchmark tool for the Tent of Trials platform.
 Measures API latency, throughput, and system resource usage under

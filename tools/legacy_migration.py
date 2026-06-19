@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# LEGACY compatibility marker
 """
 Legacy data migration tool for Tent of Trials.
 

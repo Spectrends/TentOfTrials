@@ -1,3 +1,4 @@
+<!-- LEGACY -->
 # Changelog
 
 > WARNING: This changelog is auto-generated from git commit messages and may

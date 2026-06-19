@@ -1,3 +1,4 @@
+<!-- LEGACY -->
 # Operations Guide
 
 > WARNING: This operations guide is a LEGACY document. It was last updated
