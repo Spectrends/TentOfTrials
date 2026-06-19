@@ -404,6 +404,45 @@ th {{ background: #1e293b; color: #94a3b8; }}
         logger.info(f"HTML report generated at {output_path}")
 
 
+def resolve_input_paths(input_pattern: Optional[str], directory: Optional[str]) -> List[str]:
+    """Resolve explicit input files from --input and/or --dir."""
+    import glob
+
+    paths: List[str] = []
+    if input_pattern:
+        if "*" in input_pattern or "?" in input_pattern:
+            matches = sorted(glob.glob(input_pattern))
+            if not matches:
+                raise FileNotFoundError(f"No files matched input pattern: {input_pattern}")
+            paths.extend(matches)
+        else:
+            if not os.path.isfile(input_pattern):
+                raise FileNotFoundError(f"Input file not found: {input_pattern}")
+            paths.append(input_pattern)
+
+    if directory:
+        if not os.path.isdir(directory):
+            raise FileNotFoundError(f"Input directory not found: {directory}")
+        dir_matches = sorted(
+            str(path)
+            for path in Path(directory).iterdir()
+            if path.is_file() and path.suffix in {".log", ".json", ".txt", ".gz"}
+        )
+        if not dir_matches:
+            raise FileNotFoundError(f"No log files found in directory: {directory}")
+        paths.extend(dir_matches)
+
+    return paths
+
+
+def format_time_range(time_range: Optional[Dict[str, Any]]) -> str:
+    if not time_range:
+        return "N/A to N/A"
+    start = time_range.get("start", "N/A")
+    end = time_range.get("end", "N/A")
+    return f"{start} to {end}"
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Log aggregator and analysis tool")
     parser.add_argument("--input", "-i", help="Input log file or glob pattern")
@@ -420,21 +459,21 @@ def main():
     if args.verbose:
         logger.setLevel(logging.DEBUG)
 
+    if not args.input and not args.dir:
+        logger.error("at least one of --input or --dir is required")
+        return 2
+
+    try:
+        input_paths = resolve_input_paths(args.input, args.dir)
+    except FileNotFoundError as exc:
+        logger.error(str(exc))
+        return 2
+
     aggregator = LogAggregator()
 
-    if args.input:
-        if '*' in args.input or '?' in args.input:
-            import glob
-            for path in glob.glob(args.input):
-                count = aggregator.process_file(path)
-                logger.info(f"Processed {path}: {count} entries")
-        else:
-            count = aggregator.process_file(args.input)
-            logger.info(f"Processed {args.input}: {count} entries")
-
-    if args.dir:
-        count = aggregator.process_directory(args.dir)
-        logger.info(f"Processed directory {args.dir}: {count} entries")
+    for path in input_paths:
+        count = aggregator.process_file(path)
+        logger.info(f"Processed {path}: {count} entries")
 
     if args.search:
         results = aggregator.search(args.search)
@@ -447,7 +486,7 @@ def main():
     summary = aggregator.get_summary()
     print(f"\nSummary:")
     print(f"  Total entries: {summary['total_entries']:,}")
-    print(f"  Time range: {summary.get('time_range', {}).get('start', 'N/A')} to {summary.get('time_range', {}).get('end', 'N/A')}")
+    print(f"  Time range: {format_time_range(summary.get('time_range'))}")
     print(f"  Error rate: {summary.get('error_rate', 0)}%")
     print(f"  By level: {', '.join(f'{k}={v}' for k, v in summary.get('by_level', {}).items())}")
     print(f"  By service: {', '.join(f'{k}={v}' for k, v in summary.get('by_service', {}).items())}")
@@ -463,4 +502,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
